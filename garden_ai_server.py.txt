@@ -1,0 +1,39 @@
+# garden_ai_server.py
+import socket
+import ollama
+
+UDP_IP = "0.0.0.0"      # Listen on all interfaces
+UDP_PORT = 8888
+
+sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+sock.bind((UDP_IP, UDP_PORT))
+
+def get_mood_from_ai(distance):
+    prompt = f"""
+    An interactive art garden detects a human at {distance:.1f} cm.
+    Decide its mood based only on closeness:
+    - under 18 cm  → EXCITED (very fast movement)
+    - 18–28 cm     → NEUTRAL (normal speed)
+    - over 28 cm   → CALM (slow and gentle)
+    Reply with exactly one word: EXCITED, NEUTRAL or CALM. Nothing else.
+    """
+    response = ollama.generate(model='qwen2.5:0.5b', prompt=prompt)['response']
+    mood = response.strip().upper()
+    if mood not in ['EXCITED', 'NEUTRAL', 'CALM']:
+        mood = 'NEUTRAL'   # safety fallback
+    return mood
+
+print("Garden AI server listening on UDP 8888…")
+
+while True:
+    data, addr = sock.recvfrom(1024)
+    msg = data.decode('utf-8').strip()
+    if msg.startswith("DISTANCE:"):
+        try:
+            dist = float(msg.split(":")[1])
+            mood = get_mood_from_ai(dist)
+            reply = f"MOOD:{mood}"
+            sock.sendto(reply.encode('utf-8'), addr)
+            print(f"Distance {dist:.1f} cm → {mood}")
+        except:
+            print("Bad packet")
